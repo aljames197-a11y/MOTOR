@@ -72,3 +72,4 @@ npm start       # serve the production build
   screens have content on first visit.
 - All imagery is generated locally in `/public/images` — the site works fully offline.
 "# motorent" 
+"# motorentals" 
