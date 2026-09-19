@@ -1,0 +1,44 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-navy-950: #070d1f;
+  --color-navy-900: #0a1226;
+  --color-navy-850: #0c1730;
+  --color-navy-800: #101e3e;
+  --color-navy-700: #16274f;
+  --color-navy-600: #22356b;
+  --color-gold-200: #f6e3b4;
+  --color-gold-300: #f0ce85;
+  --color-gold-400: #e9b94f;
+  --color-gold-500: #d9a83f;
+  --color-gold-600: #b7882c;
+  --color-cream: #f4f0e4;
+  --color-steel: #93a0c2;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-navy-950 text-cream antialiased;
+}
+
+::selection {
+  @apply bg-gold-500/40;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #22356b #0a1226;
+}
+
+input[type='date']::-webkit-calendar-picker-indicator {
+  opacity: 0.75;
+  cursor: pointer;
+}
