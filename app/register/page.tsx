@@ -7,47 +7,32 @@ import { useAuth } from '@/lib/auth-context';
 import { AuthShell } from '@/components/AuthShell';
 import { ErrorNote, GoldPill, PasswordField, UnderlineField } from '@/components/AuthField';
 
-const REDIRECT_SECONDS = 8;
-
 function safeNext(raw: string | null): string {
   return raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : '/profile';
 }
+
+type Stage = 'form' | 'confirm' | 'done';
 
 function RegisterInner() {
   const router = useRouter();
   const sp = useSearchParams();
   const { user, register } = useAuth();
-  const [stage, setStage] = useState<'form' | 'success'>('form');
+  const [stage, setStage] = useState<Stage>('form');
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' });
   const [terms, setTerms] = useState(false);
   const [error, setError] = useState('');
-  const [countdown, setCountdown] = useState(REDIRECT_SECONDS);
+  const [loading, setLoading] = useState(false);
 
   const nextRaw = sp.get('next');
   const hasNext = !!nextRaw;
   const signinHref = hasNext ? `/signin?next=${encodeURIComponent(nextRaw!)}` : '/signin';
   const dest = safeNext(nextRaw);
 
+  // If already logged in (e.g. confirmation was disabled and they got a session)
   useEffect(() => {
-    if (stage !== 'success') return;
-    setCountdown(REDIRECT_SECONDS);
-    const iv = window.setInterval(() => {
-      setCountdown((c) => {
-        if (c <= 1) {
-          window.clearInterval(iv);
-          router.push(signinHref);
-          return 0;
-        }
-        return c - 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(iv);
-  }, [stage, router, signinHref]);
-
-  // Already signed in with a pending destination — send them on.
-  useEffect(() => {
-    if (user && hasNext && stage === 'form') router.replace(dest);
-  }, [user, hasNext, dest, stage, router]);
+    if (user && stage === 'form') router.replace(dest);
+    if (user && stage === 'done') router.replace(dest);
+  }, [user, stage, dest, router]);
 
   if (user && stage === 'form') {
     return (
@@ -65,71 +50,89 @@ function RegisterInner() {
     );
   }
 
-  if (stage === 'success') {
+  // Email confirmation required
+  if (stage === 'confirm') {
     return (
       <AuthShell>
         <div className="mx-auto max-w-md">
-          <h1 className="text-2xl font-bold text-slate-900">Registration success!</h1>
-          <p className="mt-4 text-[15px] leading-relaxed text-slate-600">
-            We sent you an email to verify your account, please check in your inbox or spam.
-          </p>
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-gold-500/10">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7 text-gold-600" aria-hidden>
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+              <polyline points="22,6 12,13 2,6" />
+            </svg>
+          </div>
+          <h1 className="mt-4 text-2xl font-bold text-slate-900">Check your inbox</h1>
           <p className="mt-3 text-[15px] leading-relaxed text-slate-600">
-            You will be automatically directed to the login page after completing verification.
+            We sent a confirmation link to <span className="font-semibold">{form.email}</span>.
+            Click it to activate your account, then sign in.
           </p>
-          <p className="mt-4 text-xs text-slate-500">
-            Click{' '}
-            <button type="button" className="font-medium text-gold-600 hover:underline">
-              here
-            </button>{' '}
-            to resend verification
+          <p className="mt-2 text-sm text-slate-500">
+            Didn&apos;t get it? Check your spam folder, or{' '}
+            <button type="button" onClick={() => setStage('form')}
+              className="font-medium text-gold-600 hover:underline">
+              try a different email
+            </button>.
           </p>
           <GoldPill className="mt-8" onClick={() => router.push(signinHref)}>
-            Done
+            Go to Login
           </GoldPill>
-          {countdown > 0 && (
-            <p className="mt-3 text-center text-xs text-slate-400">
-              Redirecting to sign in in {countdown}s…
-            </p>
-          )}
         </div>
       </AuthShell>
     );
   }
 
-  function submit(e: React.FormEvent) {
+  // Registered + immediately signed in (no email confirmation)
+  if (stage === 'done') {
+    return (
+      <AuthShell>
+        <div className="mx-auto max-w-md">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-100">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7 text-emerald-600" aria-hidden>
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+          </div>
+          <h1 className="mt-4 text-2xl font-bold text-slate-900">Account created!</h1>
+          <p className="mt-3 text-[15px] leading-relaxed text-slate-600">
+            You&apos;re signed in and ready to book.
+          </p>
+          <GoldPill className="mt-8" onClick={() => router.push(dest)}>
+            {hasNext ? 'Continue to Checkout' : 'Go to My Profile'}
+          </GoldPill>
+        </div>
+      </AuthShell>
+    );
+  }
+
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (form.name.trim().length < 2) {
-      setError('Please enter your full name.');
-      return;
-    }
-    if (!/^\S+@\S+\.\S+$/.test(form.email)) {
-      setError('Please enter a valid email address.');
-      return;
-    }
-    if (form.password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
-    if (form.password !== form.confirm) {
-      setError('Passwords do not match.');
-      return;
-    }
-    if (!terms) {
-      setError('Please agree to the Terms and Conditions to continue.');
-      return;
-    }
-    const res = register({
+    if (form.name.trim().length < 2) { setError('Please enter your full name.'); return; }
+    if (!/^\S+@\S+\.\S+$/.test(form.email)) { setError('Please enter a valid email address.'); return; }
+    if (form.password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+    if (form.password !== form.confirm) { setError('Passwords do not match.'); return; }
+    if (!terms) { setError('Please agree to the Terms and Conditions to continue.'); return; }
+
+    setLoading(true);
+    setError('');
+    const res = await register({
       name: form.name,
       email: form.email,
       phone: '',
       licenseNo: '',
       password: form.password,
     });
-    if (!res.ok) {
-      setError(res.error ?? 'Unable to create your account.');
-      return;
+    setLoading(false);
+
+    if (!res.ok) { setError(res.error ?? 'Unable to create your account.'); return; }
+
+    // If Supabase returned a session immediately (email confirm disabled) → go to done
+    // Otherwise show the "check your inbox" screen
+    if (res.needsConfirmation) {
+      setStage('confirm');
+    } else {
+      setStage('done');
     }
-    setStage('success');
   }
 
   return (
@@ -149,45 +152,24 @@ function RegisterInner() {
         </p>
 
         <form onSubmit={submit} className="mt-9 space-y-6" noValidate>
-          <UnderlineField
-            label="Full name"
-            value={form.name}
+          <UnderlineField label="Full name" value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="John Smith"
-            autoComplete="name"
-          />
-          <UnderlineField
-            label="Email"
-            type="email"
-            value={form.email}
+            placeholder="Juan Dela Cruz" autoComplete="name" />
+          <UnderlineField label="Email" type="email" value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
-            placeholder="john@smith.com"
-            autoComplete="email"
-          />
-          <PasswordField
-            label="Password"
-            value={form.password}
+            placeholder="juan@example.com" autoComplete="email" />
+          <PasswordField label="Password" value={form.password}
             onChange={(v) => setForm({ ...form, password: v })}
-            placeholder="Password"
-            autoComplete="new-password"
-          />
-          <PasswordField
-            label="Confirm Password"
-            value={form.confirm}
+            placeholder="Password (min 6 characters)" autoComplete="new-password" />
+          <PasswordField label="Confirm Password" value={form.confirm}
             onChange={(v) => setForm({ ...form, confirm: v })}
-            placeholder="Confirm Password"
-            autoComplete="new-password"
-          />
+            placeholder="Confirm Password" autoComplete="new-password" />
 
           <label className="flex items-start gap-2.5 text-sm text-slate-600">
-            <input
-              type="checkbox"
-              checked={terms}
-              onChange={(e) => setTerms(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-[#22C55E]"
-            />
+            <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-[#22C55E]" />
             <span>
-              I agree to store&apos;s{' '}
+              I agree to the{' '}
               <a href="#terms" className="font-medium text-gold-600 hover:underline">
                 Terms and Conditions
               </a>
@@ -196,7 +178,9 @@ function RegisterInner() {
 
           {error && <ErrorNote>{error}</ErrorNote>}
 
-          <GoldPill type="submit">Register Account</GoldPill>
+          <GoldPill type="submit" disabled={loading}>
+            {loading ? 'Creating account…' : 'Register Account'}
+          </GoldPill>
         </form>
       </div>
     </AuthShell>
@@ -205,9 +189,7 @@ function RegisterInner() {
 
 export default function RegisterPage() {
   return (
-    <Suspense
-      fallback={<div className="grid min-h-screen place-items-center text-sm text-slate-500">Loading…</div>}
-    >
+    <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-slate-500">Loading…</div>}>
       <RegisterInner />
     </Suspense>
   );

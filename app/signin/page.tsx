@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
-import { DEMO_CREDENTIALS, useAuth } from '@/lib/auth-context';
+import { useAuth } from '@/lib/auth-context';
 import { AuthShell } from '@/components/AuthShell';
 import { ErrorNote, GoldPill, PasswordField, UnderlineField } from '@/components/AuthField';
 
@@ -18,6 +18,7 @@ function SignInInner() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
 
   const nextRaw = sp.get('next');
@@ -25,7 +26,6 @@ function SignInInner() {
   const dest = safeNext(nextRaw);
   const registerHref = hasNext ? `/register?next=${encodeURIComponent(nextRaw!)}` : '/register';
 
-  // Already signed in but bounced here with a destination (e.g. a gated checkout) — send them on.
   useEffect(() => {
     if (user && hasNext) router.replace(dest);
   }, [user, hasNext, dest, router]);
@@ -35,16 +35,8 @@ function SignInInner() {
       <AuthShell>
         <div className="mx-auto max-w-sm lg:max-w-md">
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-100">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-7 w-7 text-emerald-600"
-              aria-hidden
-            >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7 text-emerald-600" aria-hidden>
               <path d="M5 12.5l4.5 4.5L19 7.5" />
             </svg>
           </div>
@@ -66,21 +58,15 @@ function SignInInner() {
     );
   }
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      setError('Please enter a valid email address.');
-      return;
-    }
-    if (!password) {
-      setError('Please enter your password.');
-      return;
-    }
-    const res = signIn(email, password);
-    if (!res.ok) {
-      setError(res.error ?? 'Unable to sign in.');
-      return;
-    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) { setError('Please enter a valid email address.'); return; }
+    if (!password) { setError('Please enter your password.'); return; }
+    setLoading(true);
+    setError('');
+    const res = await signIn(email, password);
+    setLoading(false);
+    if (!res.ok) { setError(res.error ?? 'Unable to sign in.'); return; }
     router.push(dest);
   }
 
@@ -109,7 +95,6 @@ function SignInInner() {
             placeholder="Email"
             autoComplete="email"
           />
-
           <div>
             <PasswordField
               label="Password"
@@ -119,45 +104,25 @@ function SignInInner() {
               autoComplete="current-password"
             />
             <p className="mt-1.5 text-[11px] text-slate-500">
-              Click{' '}
-              <button
-                type="button"
-                onClick={() => setShowForgot((v) => !v)}
-                className="font-medium text-gold-600 hover:underline"
-              >
-                here
-              </button>{' '}
-              in case you forget your password
+              <button type="button" onClick={() => setShowForgot((v) => !v)}
+                className="font-medium text-gold-600 hover:underline">
+                Forgot your password?
+              </button>
             </p>
             {showForgot && (
               <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                Password reset isn&apos;t available in this prototype — use the demo account below.
+                Enter your email above and click &ldquo;Forgot your password?&rdquo; — password reset
+                emails are sent via Supabase to your inbox.
               </p>
             )}
           </div>
 
           {error && <ErrorNote>{error}</ErrorNote>}
 
-          <GoldPill type="submit">Login</GoldPill>
+          <GoldPill type="submit" disabled={loading}>
+            {loading ? 'Signing in…' : 'Login'}
+          </GoldPill>
         </form>
-
-        <div className="mt-9 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
-          <p className="font-semibold text-slate-700">Demo account</p>
-          <p className="mt-1">
-            {DEMO_CREDENTIALS.email} / {DEMO_CREDENTIALS.password}
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setEmail(DEMO_CREDENTIALS.email);
-              setPassword(DEMO_CREDENTIALS.password);
-              setError('');
-            }}
-            className="mt-1.5 font-bold text-gold-600 hover:underline"
-          >
-            Fill demo credentials →
-          </button>
-        </div>
       </div>
     </AuthShell>
   );
@@ -165,9 +130,7 @@ function SignInInner() {
 
 export default function SignInPage() {
   return (
-    <Suspense
-      fallback={<div className="grid min-h-screen place-items-center text-sm text-slate-500">Loading…</div>}
-    >
+    <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-slate-500">Loading…</div>}>
       <SignInInner />
     </Suspense>
   );

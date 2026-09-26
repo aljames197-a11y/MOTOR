@@ -1,7 +1,9 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { supabase, type BookingRow } from './supabase';
+import { useAuth } from './auth-context';
 
 export interface BookingCustomer {
   name: string;
@@ -36,112 +38,110 @@ export interface Booking {
 
 interface BookingContextValue {
   bookings: Booking[];
-  addBooking: (b: Booking) => void;
+  loading: boolean;
+  addBooking: (b: Booking) => Promise<void>;
   getBooking: (id: string) => Booking | undefined;
+  refresh: () => Promise<void>;
 }
 
 const BookingContext = createContext<BookingContextValue | null>(null);
-const STORAGE_KEY = 'motorent.bookings.v1';
 
-const seed: Booking[] = [
-  {
-    id: 'MR-8H2KQD',
-    motoId: 'm5',
-    motoSlug: 'kawasaki-ninja-400',
-    motoName: 'Kawasaki Ninja 400',
-    brand: 'Kawasaki',
-    image: '/images/kawasaki-ninja-400.jpg',
-    pickup: '2026-08-02',
-    dropoff: '2026-08-05',
-    days: 4,
-    rate: 1800,
-    subtotal: 7200,
-    discount: 0,
-    total: 7200,
-    deposit: 5000,
-    location: 'Iloilo City — Plaza District',
-    notes: '',
-    status: 'completed',
+function rowToBooking(r: BookingRow): Booking {
+  return {
+    id: r.id,
+    motoId: r.moto_id,
+    motoSlug: r.moto_slug,
+    motoName: r.moto_name,
+    brand: r.brand,
+    image: r.image,
+    pickup: r.pickup,
+    dropoff: r.dropoff,
+    days: r.days,
+    rate: Number(r.rate),
+    subtotal: Number(r.subtotal),
+    discount: Number(r.discount),
+    total: Number(r.total),
+    deposit: Number(r.deposit),
+    location: r.location,
+    notes: r.notes ?? '',
+    status: r.status,
     customer: {
-      name: 'Juan Dela Cruz',
-      phone: '+63 917 555 0142',
-      email: 'juan.dela.cruz@example.com',
-      licenseNo: 'PH-B 09171-2231-456',
+      name: r.customer_name,
+      phone: r.customer_phone,
+      email: r.customer_email,
+      licenseNo: r.customer_license,
     },
-    createdAt: '2026-07-28T09:15:00.000Z',
-  },
-  {
-    id: 'MR-3T7WPB',
-    motoId: 'm3',
-    motoSlug: 'honda-adv-160',
-    motoName: 'Honda ADV 160',
-    brand: 'Honda',
-    image: '/images/honda-adv-160.jpg',
-    pickup: '2026-09-21',
-    dropoff: '2026-09-25',
-    days: 5,
-    rate: 1200,
-    subtotal: 6000,
-    discount: 0,
-    total: 6000,
-    deposit: 2500,
-    location: 'Calinogon Town Center',
-    notes: 'Coastal loop towards San Joaquin.',
-    status: 'upcoming',
-    customer: {
-      name: 'Juan Dela Cruz',
-      phone: '+63 917 555 0142',
-      email: 'juan.dela.cruz@example.com',
-      licenseNo: 'PH-B 09171-2231-456',
-    },
-    createdAt: '2026-09-10T14:05:00.000Z',
-  },
-];
+    createdAt: r.created_at,
+  };
+}
 
 export function bookingCode(): string {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let code = 'MR-';
-  for (let i = 0; i < 6; i += 1) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
   return code;
 }
 
 export function BookingProvider({ children }: { children: ReactNode }) {
-  const [bookings, setBookings] = useState<Booking[]>(seed);
-  const [loaded, setLoaded] = useState(false);
+  const { user } = useAuth();
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Booking[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setBookings(parsed);
-        }
-      }
-    } catch {
-      /* ignore corrupted storage */
-    }
-    setLoaded(true);
-  }, []);
+  const refresh = useCallback(async () => {
+    if (!user) { setBookings([]); return; }
+    setLoading(true);
+    // RLS filters by customer_email = auth.jwt()->>'email' automatically
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (!error && data) setBookings((data as BookingRow[]).map(rowToBooking));
+    setLoading(false);
+  }, [user]);
 
-  useEffect(() => {
-    if (!loaded) return;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(bookings));
-    } catch {
-      /* storage unavailable */
-    }
-  }, [bookings, loaded]);
+  useEffect(() => { refresh(); }, [refresh]);
 
   const value = useMemo<BookingContextValue>(
     () => ({
       bookings,
-      addBooking: (b) => setBookings((prev) => [b, ...prev]),
+      loading,
+      addBooking: async (b: Booking) => {
+        if (!user) return;
+        // No user_id column — the schema uses customer_email for RLS
+        const row: Omit<BookingRow, 'created_at'> = {
+          id: b.id,
+          moto_id: b.motoId,
+          moto_slug: b.motoSlug,
+          moto_name: b.motoName,
+          brand: b.brand,
+          image: b.image,
+          pickup: b.pickup,
+          dropoff: b.dropoff,
+          days: b.days,
+          rate: b.rate,
+          subtotal: b.subtotal,
+          discount: b.discount,
+          total: b.total,
+          deposit: b.deposit,
+          location: b.location,
+          notes: b.notes,
+          status: b.status,
+          customer_name: b.customer.name,
+          customer_phone: b.customer.phone,
+          customer_email: b.customer.email,   // must match auth.jwt()->>'email'
+          customer_license: b.customer.licenseNo,
+        };
+        const { error } = await supabase.from('bookings').insert(row);
+        if (error) {
+          console.error('Booking insert failed:', error.message);
+          throw new Error(error.message);
+        }
+        setBookings((prev) => [b, ...prev]);
+      },
       getBooking: (id) => bookings.find((b) => b.id === id),
+      refresh,
     }),
-    [bookings],
+    [bookings, loading, user, refresh],
   );
 
   return <BookingContext.Provider value={value}>{children}</BookingContext.Provider>;
@@ -149,8 +149,6 @@ export function BookingProvider({ children }: { children: ReactNode }) {
 
 export function useBookings(): BookingContextValue {
   const ctx = useContext(BookingContext);
-  if (!ctx) {
-    throw new Error('useBookings must be used within a BookingProvider');
-  }
+  if (!ctx) throw new Error('useBookings must be used within a BookingProvider');
   return ctx;
 }

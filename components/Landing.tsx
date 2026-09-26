@@ -38,32 +38,35 @@ function Tile({ label, img, href, big }: (typeof tiles)[number]) {
 export function Landing() {
   return (
     <>
-      {/* Hero */}
-      <section className="relative flex min-h-[560px] items-center overflow-hidden sm:min-h-[600px]">
-        <img
-          src="/images/landing-hero.jpg"
-          alt="Rider on a winding mountain road at dusk"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        <div className="absolute inset-0 bg-linear-to-r from-navy-950 via-navy-950/75 to-navy-950/10" />
-        <div className="absolute inset-0 bg-linear-to-t from-navy-950 via-transparent to-navy-950/50" />
+      {/* Hero — split layout: dark left text panel + motorcycle photo right */}
+      <section className="grid min-h-[560px] sm:min-h-[600px] lg:grid-cols-2">
+        {/* Left — dark text panel */}
+        <div className="flex flex-col justify-center bg-navy-950 px-8 py-20 sm:px-14 lg:px-16">
+          <h1 className="text-4xl font-black leading-tight tracking-tight text-gold-400 sm:text-5xl">
+            Find your dream<br />motorcycle here!
+          </h1>
+          <p className="mt-6 max-w-sm text-sm leading-relaxed text-gold-300/70 sm:text-base">
+            We have 100+ collections of new and used motorcycles from big names such as Honda,
+            Kawasaki, Yamaha, Ducati, etc. We will give the best price you can get and great
+            quality motorcycle.
+          </p>
+          <Link
+            href="/motorcycles"
+            className="mt-10 inline-block w-fit text-sm font-bold text-gold-400 underline underline-offset-4 transition hover:text-gold-300"
+          >
+            Let&apos;s find one
+          </Link>
+        </div>
 
-        <div className="relative mx-auto w-full max-w-7xl px-4 py-24 sm:px-6">
-          <div className="max-w-lg">
-            <h1 className="text-4xl font-black leading-tight tracking-tight text-gold-400 sm:text-5xl">
-              Find your dream motorcycle here!
-            </h1>
-            <p className="mt-5 text-sm leading-relaxed text-steel sm:text-base">
-              We have 100s of collections of new and used motorcycles from big names such as Honda,
-              Yamaha, Kawasaki and more — find yours, your choice, and your style here.
-            </p>
-            <Link
-              href="/motorcycles"
-              className="mt-8 inline-block rounded-full bg-gold-500 px-8 py-3 text-sm font-extrabold text-navy-950 shadow-lg shadow-black/30 transition hover:bg-gold-400"
-            >
-              Let&apos;s find one
-            </Link>
-          </div>
+        {/* Right — hero photo */}
+        <div className="relative min-h-[320px] overflow-hidden bg-navy-900 lg:min-h-0">
+          <img
+            src="/images/motom.jpg"
+            alt="Rider on a winding mountain road"
+            className="absolute inset-0 h-full w-full object-cover object-center"
+          />
+          {/* subtle fade on the left edge to blend into dark panel */}
+          <div className="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-navy-950 to-transparent" />
         </div>
       </section>
 

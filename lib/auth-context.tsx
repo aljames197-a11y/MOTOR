@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import { supabase, type ProfileRow } from './supabase';
 
 export interface User {
   id: string;
@@ -9,139 +11,143 @@ export interface User {
   email: string;
   phone: string;
   licenseNo: string;
-  password: string; // stored in plaintext — frontend prototype only, no backend
 }
 
 interface AuthResult {
   ok: boolean;
   error?: string;
+  /** true when Supabase requires email confirmation before the session is active */
+  needsConfirmation?: boolean;
 }
 
 interface AuthContextValue {
   user: User | null;
-  ready: boolean; // true once the persisted session has been read
-  signIn: (email: string, password: string) => AuthResult;
+  ready: boolean;
+  signIn: (email: string, password: string) => Promise<AuthResult>;
   register: (data: {
     name: string;
     email: string;
     phone: string;
     licenseNo: string;
     password: string;
-  }) => AuthResult;
-  signOut: () => void;
-}
-
-const SESSION_KEY = 'motorent.session.v1';
-const USERS_KEY = 'motorent.users.v1';
-
-const DEMO_USER: User = {
-  id: 'u-demo',
-  name: 'Juan Dela Cruz',
-  email: 'juan.dela.cruz@example.com',
-  phone: '+63 917 555 0142',
-  licenseNo: 'PH-B 09171-2231-456',
-  password: 'moto2026',
-};
-
-export const DEMO_CREDENTIALS = {
-  email: DEMO_USER.email,
-  password: DEMO_USER.password,
-};
-
-function loadUsers(): User[] {
-  try {
-    const raw = window.localStorage.getItem(USERS_KEY);
-    const parsed = raw ? (JSON.parse(raw) as User[]) : [];
-    const list = Array.isArray(parsed) ? parsed : [];
-    return [DEMO_USER, ...list.filter((u) => u.email.toLowerCase() !== DEMO_USER.email)];
-  } catch {
-    return [DEMO_USER];
-  }
-}
-
-function saveUsers(users: User[]) {
-  try {
-    const others = users.filter((u) => u.id !== 'u-demo');
-    window.localStorage.setItem(USERS_KEY, JSON.stringify(others));
-  } catch {
-    /* storage unavailable */
-  }
-}
-
-function persistSession(u: User | null) {
-  try {
-    if (u) window.localStorage.setItem(SESSION_KEY, JSON.stringify(u));
-    else window.localStorage.removeItem(SESSION_KEY);
-  } catch {
-    /* storage unavailable */
-  }
+  }) => Promise<AuthResult>;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+function profileToUser(session: Session, profile: ProfileRow | null): User {
+  return {
+    id: session.user.id,
+    name: profile?.name ?? session.user.user_metadata?.name ?? session.user.email ?? '',
+    email: session.user.email ?? '',
+    phone: profile?.phone ?? session.user.user_metadata?.phone ?? '',
+    licenseNo: profile?.license_no ?? session.user.user_metadata?.license_no ?? '',
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
 
+  async function fetchAndSetUser(session: Session | null) {
+    if (!session) { setUser(null); return; }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .single();
+    setUser(profileToUser(session, profile as ProfileRow | null));
+  }
+
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(SESSION_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as User;
-        if (parsed && parsed.email) setUser(parsed);
-      }
-    } catch {
-      /* ignore corrupted session */
-    }
-    setReady(true);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      fetchAndSetUser(session).finally(() => setReady(true));
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      fetchAndSetUser(session);
+    });
+    return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       ready,
-      signIn: (email, password) => {
-        const normalized = email.trim().toLowerCase();
-        const found = loadUsers().find((u) => u.email.toLowerCase() === normalized);
-        if (!found) {
-          return {
-            ok: false,
-            error: 'No account found for that email. Try the demo account or register a new one.',
-          };
+
+      signIn: async (email, password) => {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error || !data.session) {
+          // Friendly message for unconfirmed accounts
+          if (error?.message?.toLowerCase().includes('email not confirmed')) {
+            return {
+              ok: false,
+              error: 'Please confirm your email first, then sign in. Check your inbox (and spam).',
+            };
+          }
+          return { ok: false, error: error?.message ?? 'Unable to sign in.' };
         }
-        if (found.password !== password) {
-          return { ok: false, error: 'Incorrect password. Please try again.' };
-        }
-        setUser(found);
-        persistSession(found);
+        await fetchAndSetUser(data.session);
         return { ok: true };
       },
-      register: (data) => {
-        const email = data.email.trim().toLowerCase();
-        const all = loadUsers();
-        if (all.some((u) => u.email.toLowerCase() === email)) {
-          return {
-            ok: false,
-            error: 'An account with that email already exists. Try signing in instead.',
-          };
+
+      register: async ({ name, email, phone, licenseNo, password }) => {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { name, phone, license_no: licenseNo } },
+        });
+
+        if (error) {
+          // Rate-limit hit — give a clear explanation instead of a raw error
+          if (
+            error.message?.toLowerCase().includes('rate limit') ||
+            error.message?.toLowerCase().includes('too many') ||
+            error.status === 429
+          ) {
+            return {
+              ok: false,
+              error:
+                'Too many sign-up attempts. Please wait a few minutes and try again, ' +
+                'or use a different email address.',
+            };
+          }
+          return { ok: false, error: error.message };
         }
-        const newUser: User = {
-          id: `u-${Date.now()}`,
-          name: data.name.trim(),
-          email: data.email.trim(),
-          phone: data.phone.trim(),
-          licenseNo: data.licenseNo.trim(),
-          password: data.password,
-        };
-        // Account is saved; the rider still needs to sign in (verification flow).
-        saveUsers([...all, newUser]);
-        return { ok: true };
+
+        // ── Case 1: email confirmation DISABLED (session returned immediately) ──
+        if (data.session) {
+          // Upsert profile in case the trigger hasn't fired yet
+          await supabase.from('profiles').upsert({
+            id: data.session.user.id,
+            name,
+            phone,
+            license_no: licenseNo,
+          });
+          await fetchAndSetUser(data.session);
+          return { ok: true };
+        }
+
+        // ── Case 2: email confirmation ENABLED (no session yet) ──
+        // Store the name in the profile row so it's ready once the user confirms
+        if (data.user) {
+          await supabase.from('profiles').upsert({
+            id: data.user.id,
+            name,
+            phone,
+            license_no: licenseNo,
+          });
+        }
+        return { ok: true, needsConfirmation: true };
       },
-      signOut: () => {
+
+      signOut: async () => {
+        await supabase.auth.signOut();
         setUser(null);
-        persistSession(null);
       },
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [user, ready],
   );
 
@@ -150,8 +156,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
   return ctx;
 }

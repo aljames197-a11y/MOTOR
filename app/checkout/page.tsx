@@ -146,7 +146,7 @@ function CheckoutForm() {
   const bike: Moto = moto;
   const breakdown = price;
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim() || !form.phone.trim() || !form.licenseNo.trim()) {
       setError('Please fill in your name, phone number, and driver’s license number.');
@@ -187,7 +187,7 @@ function CheckoutForm() {
       },
       createdAt: new Date().toISOString(),
     };
-    addBooking(booking);
+    await addBooking(booking);
     router.push(`/success?b=${booking.id}`);
   }
 

@@ -24,8 +24,17 @@ function StatusBadge({ status }: { status: BookingStatus }) {
 }
 
 export default function ProfilePage() {
-  const { bookings } = useBookings();
-  const { user } = useAuth();
+  const { bookings, loading } = useBookings();
+  const { user, ready } = useAuth();
+
+  // Still restoring session
+  if (!ready) {
+    return (
+      <div className="grid min-h-[60vh] place-items-center text-sm text-steel">
+        Loading…
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -39,16 +48,12 @@ export default function ProfilePage() {
             Sign in or create an account to view your rider profile and booking history.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Link
-              href="/signin"
-              className="rounded-xl bg-gold-500 px-6 py-3 text-sm font-extrabold text-navy-950 hover:bg-gold-400"
-            >
+            <Link href="/signin"
+              className="rounded-xl bg-gold-500 px-6 py-3 text-sm font-extrabold text-navy-950 hover:bg-gold-400">
               Sign In
             </Link>
-            <Link
-              href="/register"
-              className="rounded-xl border border-cream/25 px-6 py-3 text-sm font-bold text-cream hover:border-gold-400 hover:text-gold-300"
-            >
+            <Link href="/register"
+              className="rounded-xl border border-cream/25 px-6 py-3 text-sm font-bold text-cream hover:border-gold-400 hover:text-gold-300">
               Register
             </Link>
           </div>
@@ -57,9 +62,7 @@ export default function ProfilePage() {
     );
   }
 
-  const rider = user.name;
-  const license = user.licenseNo || 'Not on file';
-  const initials = rider
+  const initials = user.name
     .split(' ')
     .map((w) => w[0])
     .slice(0, 2)
@@ -85,74 +88,67 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+      {/* Profile card */}
       <div className="flex flex-wrap items-center gap-5 rounded-3xl border border-navy-600/40 bg-navy-850 p-6">
         <div className="grid h-20 w-20 place-items-center rounded-full border-2 border-gold-500 bg-navy-800 text-2xl font-black text-gold-400">
           {initials}
         </div>
         <div>
-          <h1 className="text-2xl font-black">{rider}</h1>
+          <h1 className="text-2xl font-black">{user.name}</h1>
           <p className="mt-0.5 text-sm text-steel">
-            License {license} • Class &ldquo;B&rdquo;
+            {user.licenseNo ? `License ${user.licenseNo} • ` : ''}Class &ldquo;B&rdquo;
           </p>
           <p className="mt-0.5 text-xs text-steel">
-            {user.email}
-            {user.phone ? ` • ${user.phone}` : ''}
+            {user.email}{user.phone ? ` • ${user.phone}` : ''}
           </p>
           <span className="mt-2 inline-block rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-bold text-emerald-400">
             ✓ Verified rider
           </span>
         </div>
-        <Link
-          href="/motorcycles"
-          className="ml-auto rounded-xl bg-gold-500 px-5 py-2.5 text-sm font-extrabold text-navy-950 transition hover:bg-gold-400"
-        >
+        <Link href="/motorcycles"
+          className="ml-auto rounded-xl bg-gold-500 px-5 py-2.5 text-sm font-extrabold text-navy-950 transition hover:bg-gold-400">
           + New Rental
         </Link>
       </div>
 
+      {/* Stats */}
       <dl className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         {stats.map(([k, v]) => (
           <div key={k} className="rounded-2xl border border-navy-600/40 bg-navy-850 p-4">
             <dt className="text-xs text-steel">{k}</dt>
-            <dd className="mt-1 truncate text-lg font-extrabold text-gold-400" title={v}>
-              {v}
-            </dd>
+            <dd className="mt-1 truncate text-lg font-extrabold text-gold-400" title={v}>{v}</dd>
           </div>
         ))}
       </dl>
 
+      {/* Booking history */}
       <h2 className="mt-10 text-xl font-extrabold">Booking history</h2>
-      {bookings.length === 0 ? (
+
+      {loading ? (
+        <div className="mt-6 text-sm text-steel">Loading bookings…</div>
+      ) : bookings.length === 0 ? (
         <div className="mt-4 rounded-2xl border border-dashed border-navy-600 p-14 text-center">
           <p className="font-bold">No bookings yet.</p>
           <p className="mt-1 text-sm text-steel">Your confirmed rentals will show up here.</p>
-          <Link
-            href="/motorcycles"
-            className="mt-5 inline-block rounded-xl bg-gold-500 px-5 py-2.5 text-sm font-extrabold text-navy-950 hover:bg-gold-400"
-          >
+          <Link href="/motorcycles"
+            className="mt-5 inline-block rounded-xl bg-gold-500 px-5 py-2.5 text-sm font-extrabold text-navy-950 hover:bg-gold-400">
             Browse Motorcycles
           </Link>
         </div>
       ) : (
         <div className="mt-4 space-y-4">
           {bookings.map((b) => (
-            <Link
-              key={b.id}
-              href={`/bookings/${b.id}`}
-              className="flex flex-wrap items-center gap-4 rounded-2xl border border-navy-600/40 bg-navy-850 p-4 transition hover:border-gold-500/50"
-            >
-              <img
-                src={b.image}
-                alt={b.motoName}
-                className="h-16 w-24 rounded-lg border border-navy-600/40 object-cover"
-              />
+            <Link key={b.id} href={`/bookings/${b.id}`}
+              className="flex flex-wrap items-center gap-4 rounded-2xl border border-navy-600/40 bg-navy-850 p-4 transition hover:border-gold-500/50">
+              <img src={b.image} alt={b.motoName}
+                className="h-16 w-24 rounded-lg border border-navy-600/40 object-cover" />
               <div className="min-w-0">
                 <p className="font-bold">
-                  {b.motoName} <span className="ml-1 text-xs font-semibold text-steel">{b.id}</span>
+                  {b.motoName}{' '}
+                  <span className="ml-1 text-xs font-semibold text-steel">{b.id}</span>
                 </p>
                 <p className="mt-0.5 truncate text-xs text-steel">
-                  {fmtDate(b.pickup)} → {fmtDate(b.dropoff)} • {b.days} day{b.days > 1 ? 's' : ''} •{' '}
-                  {b.location}
+                  {fmtDate(b.pickup)} → {fmtDate(b.dropoff)} • {b.days} day{b.days > 1 ? 's' : ''} • {b.location}
                 </p>
               </div>
               <div className="ml-auto text-right">
