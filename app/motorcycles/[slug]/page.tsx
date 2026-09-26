@@ -47,17 +47,22 @@ export default async function MotoDetailPage({
   if (!moto) notFound();
 
   const similar = similarMotos(moto, 3);
+
   const specs: [string, string][] = [
     ['Engine', `${moto.cc} cc, fuel-injected`],
     ['Transmission', moto.transmission],
-    ['Fuel tank', moto.fuelTank],
+    ['Fuel tank', `${moto.fuelTank}`],
     ['Seat height', moto.seatHeight],
     ['Model year', String(moto.year)],
     ['Color', moto.color],
   ];
 
+  // 4 thumbnail crops
+  const thumbPositions = ['object-left', 'object-center-left', 'object-center', 'object-right'];
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
+      {/* Breadcrumb */}
       <nav className="text-xs text-steel" aria-label="Breadcrumb">
         <Link href="/" className="hover:text-gold-400">
           Home
@@ -69,10 +74,12 @@ export default async function MotoDetailPage({
         / <span className="font-semibold text-cream">{moto.name}</span>
       </nav>
 
-      <div className="mt-6 grid gap-10 lg:grid-cols-2">
-        {/* Gallery */}
-        <div>
-          <div className="relative overflow-hidden rounded-3xl border border-navy-600/40">
+      {/* Two-column layout: left = gallery + specs + included, right = info + booking */}
+      <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_1fr]">
+        {/* ── LEFT COLUMN ── */}
+        <div className="flex flex-col gap-6">
+          {/* Main image */}
+          <div className="relative overflow-hidden rounded-2xl border border-navy-600/40">
             <img
               src={moto.image}
               alt={moto.name}
@@ -80,17 +87,54 @@ export default async function MotoDetailPage({
             />
             {!moto.available && <Stamp text="Booked" />}
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-3">
-            {['object-left', 'object-center', 'object-right'].map((pos) => (
+
+          {/* 4 thumbnails */}
+          <div className="grid grid-cols-4 gap-2">
+            {thumbPositions.map((pos) => (
               <div key={pos} className="overflow-hidden rounded-xl border border-navy-600/40">
-                <img src={moto.image} alt="" className={`h-24 w-full object-cover ${pos}`} />
+                <img
+                  src={moto.image}
+                  alt=""
+                  className={`h-20 w-full object-cover ${pos}`}
+                />
               </div>
             ))}
           </div>
+
+          {/* Specifications */}
+          <div className="rounded-2xl border border-navy-600/40 bg-navy-850/60 p-5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gold-400">
+              Specifications
+            </h3>
+            <dl className="mt-3 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              {specs.map(([k, v]) => (
+                <div key={k} className="flex flex-col">
+                  <dt className="text-steel">{k}</dt>
+                  <dd className="font-semibold text-cream">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+
+          {/* What's included */}
+          <div className="rounded-2xl border border-navy-600/40 bg-navy-850/60 p-5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gold-400">
+              What&apos;s included
+            </h3>
+            <ul className="mt-3 space-y-2">
+              {INCLUDED.map((item) => (
+                <li key={item} className="flex items-start gap-2 text-sm text-steel">
+                  <Check />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
-        {/* Info */}
-        <div>
+        {/* ── RIGHT COLUMN ── */}
+        <div className="flex flex-col gap-6">
+          {/* Badges */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-navy-800 px-3 py-1 text-xs font-semibold text-gold-300">
               {moto.category}
@@ -106,15 +150,20 @@ export default async function MotoDetailPage({
             )}
           </div>
 
-          <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">{moto.name}</h1>
-          <p className="mt-1 text-sm text-steel">
-            {moto.brand} • {moto.year} • {moto.color}
-          </p>
-          <p className="mt-2 text-sm font-semibold text-gold-400">
-            ★ {moto.rating} <span className="font-normal text-steel">({moto.reviews} rider reviews)</span>
-          </p>
+          {/* Name + meta */}
+          <div>
+            <h1 className="text-3xl font-black tracking-tight sm:text-4xl">{moto.name}</h1>
+            <p className="mt-1 text-sm text-steel">
+              {moto.brand} • {moto.year} • {moto.color}
+            </p>
+            <p className="mt-2 text-sm font-semibold text-gold-400">
+              ★ {moto.rating}{' '}
+              <span className="font-normal text-steel">({moto.reviews} rider reviews)</span>
+            </p>
+          </div>
 
-          <div className="mt-5">
+          {/* Price */}
+          <div>
             <p className="text-4xl font-black text-gold-400">
               {peso(moto.pricePerDay)}
               <span className="text-base font-bold text-steel">/day</span>
@@ -124,9 +173,11 @@ export default async function MotoDetailPage({
             </p>
           </div>
 
-          <p className="mt-5 text-sm leading-relaxed text-steel">{moto.description}</p>
+          {/* Description */}
+          <p className="text-sm leading-relaxed text-steel">{moto.description}</p>
 
-          <ul className="mt-5 grid gap-2 sm:grid-cols-2">
+          {/* Highlights */}
+          <ul className="grid gap-2 sm:grid-cols-2">
             {moto.highlights.map((h) => (
               <li key={h} className="flex items-start gap-2 text-sm text-cream">
                 <Check />
@@ -135,38 +186,12 @@ export default async function MotoDetailPage({
             ))}
           </ul>
 
-          <div className="mt-6 rounded-2xl border border-navy-600/40 bg-navy-850/60 p-5">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gold-400">Specifications</h3>
-            <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2.5 text-sm">
-              {specs.map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-3 border-b border-navy-600/30 pb-2">
-                  <dt className="text-steel">{k}</dt>
-                  <dd className="text-right font-semibold text-cream">{v}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-
-          <div className="mt-6 rounded-2xl border border-navy-600/40 bg-navy-850/60 p-5">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gold-400">
-              What&apos;s included
-            </h3>
-            <ul className="mt-3 space-y-2">
-              {INCLUDED.map((i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-steel">
-                  <Check />
-                  {i}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="mt-6">
-            <BookingPanel moto={moto} />
-          </div>
+          {/* Booking panel */}
+          <BookingPanel moto={moto} />
         </div>
       </div>
 
+      {/* Similar bikes */}
       <section className="mt-16">
         <SectionHeading eyebrow="Keep looking" title="Similar Bikes" link="/motorcycles" />
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

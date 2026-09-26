@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 const tiles = [
-  { label: 'OUR SHOWROOM', img: '/images/landing-hero.jpg', href: '/motorcycles', big: true },
+  { label: 'OUR SHOWROOM', img: '/images/landing-show.jpg', href: '/motorcycles', big: true },
   { label: 'BEST SELLERS', img: '/images/honda-adv-160.jpg', href: '/motorcycles', big: false },
   { label: 'OUR BIKES', img: '/images/kawasaki-ninja-400.jpg', href: '/motorcycles', big: false },
   { label: 'FEATURED', img: '/images/honda-rebel-500.jpg', href: '/motorcycles', big: false },
